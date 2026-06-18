@@ -17,6 +17,7 @@ app.use(express.json());
 
 const authRoutes = require("./routes/auth.js");
 const recipeRoutes = require("./routes/recipes.js");
+const favoriteRoutes = require("./routes/favorites.js");
 
 connectDB()
   .then((db) => {
@@ -24,6 +25,7 @@ connectDB()
 
     app.use("/api", authRoutes);
     app.use("/api", recipeRoutes);
+    app.use("/api", favoriteRoutes);
 
     app.get("/", (req, res) => {
       res.send({
