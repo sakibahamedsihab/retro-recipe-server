@@ -16,12 +16,14 @@ app.use(
 app.use(express.json());
 
 const authRoutes = require("./routes/auth.js");
+const recipeRoutes = require("./routes/recipes.js");
 
 connectDB()
   .then((db) => {
     app.set("db", db);
 
     app.use("/api", authRoutes);
+    app.use("/api", recipeRoutes);
 
     app.get("/", (req, res) => {
       res.send({
