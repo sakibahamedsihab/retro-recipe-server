@@ -89,4 +89,68 @@ router.get("/users/me", verifyToken, async (req, res) => {
   }
 });
 
+// ৪. ইউজারের নিজস্ব ড্যাশবোর্ড স্ট্যাটস (GET /api/users/dashboard-stats)
+router.get("/users/dashboard-stats", verifyToken, async (req, res) => {
+  try {
+    const db = req.app.get("db");
+    const email = req.user.email;
+
+    const totalRecipes = await db
+      .collection("recipes")
+      .countDocuments({ authorEmail: email, status: { $ne: "deleted" } });
+
+    const totalFavorites = await db
+      .collection("favorites")
+      .countDocuments({ userEmail: email });
+
+    const recipes = await db
+      .collection("recipes")
+      .find({ authorEmail: email, status: { $ne: "deleted" } })
+      .toArray();
+
+    const totalLikesReceived = recipes.reduce(
+      (sum, recipe) => sum + (recipe.likesCount || 0),
+      0
+    );
+
+    res.json({
+      totalRecipes,
+      totalFavorites,
+      totalLikesReceived,
+    });
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// ৫. ইউজারের প্রোফাইল আপডেট করা (PUT /api/users/profile)
+router.put("/users/profile", verifyToken, async (req, res) => {
+  try {
+    const { name, image, bio } = req.body;
+    const db = req.app.get("db");
+    const usersCollection = db.collection("users");
+
+    const updateFields = { updatedAt: new Date() };
+    if (name) updateFields.name = name;
+    if (image !== undefined) updateFields.image = image;
+    if (bio !== undefined) updateFields.bio = bio;
+
+    const result = await usersCollection.updateOne(
+      { email: req.user.email },
+      { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const updatedUser = await usersCollection.findOne({ email: req.user.email });
+    res.json({ success: true, user: updatedUser });
+  } catch (error) {
+    console.error("Profile update error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 module.exports = router;

@@ -168,4 +168,54 @@ router.post("/payments/confirm", verifyToken, async (req, res) => {
   }
 });
 
+// ৩. ইউজারের পারচেজ করা রেসিপিগুলোর লিস্ট (GET /api/payments/purchased-recipes)
+router.get("/payments/purchased-recipes", verifyToken, async (req, res) => {
+  try {
+    const db = req.app.get("db");
+
+    const purchased = await db
+      .collection("payments")
+      .aggregate([
+        {
+          $match: {
+            userEmail: req.user.email,
+            recipeId: { $ne: null },
+            paymentStatus: "succeeded",
+          },
+        },
+        {
+          $lookup: {
+            from: "recipes",
+            localField: "recipeId",
+            foreignField: "_id",
+            as: "recipeDetails",
+          },
+        },
+        { $unwind: "$recipeDetails" },
+        {
+          $project: {
+            _id: 1,
+            transactionId: 1,
+            paidAt: 1,
+            amount: 1,
+            recipeId: 1,
+            recipeName: "$recipeDetails.recipeName",
+            recipeImage: "$recipeDetails.recipeImage",
+            category: "$recipeDetails.category",
+            cuisineType: "$recipeDetails.cuisineType",
+            preparationTime: "$recipeDetails.preparationTime",
+            authorName: "$recipeDetails.authorName",
+            likesCount: "$recipeDetails.likesCount",
+          },
+        },
+      ])
+      .toArray();
+
+    res.json(purchased);
+  } catch (error) {
+    console.error("Error fetching purchased recipes:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 module.exports = router;

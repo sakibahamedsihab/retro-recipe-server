@@ -121,7 +121,6 @@ router.get("/recipes", async (req, res) => {
   }
 });
 
-// ৪. ইউজারের নিজস্ব রেসিপি পাওয়ার জন্য রাউট
 router.get("/recipes/my-recipes", verifyToken, async (req, res) => {
   try {
     const db = req.app.get("db");
@@ -135,6 +134,58 @@ router.get("/recipes/my-recipes", verifyToken, async (req, res) => {
     res.json(recipes);
   } catch (error) {
     console.error("Error fetching my recipes:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// ৫. রেসিপি আপডেট করার জন্য রাউট (PUT /api/recipes/:id)
+router.put("/recipes/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      recipeName,
+      recipeImage,
+      category,
+      cuisineType,
+      difficultyLevel,
+      preparationTime,
+      ingredients,
+      instructions,
+    } = req.body;
+
+    const db = req.app.get("db");
+    const recipesCollection = db.collection("recipes");
+
+    const recipe = await recipesCollection.findOne({ _id: new ObjectId(id) });
+    if (!recipe) return res.status(404).json({ message: "Recipe not found" });
+
+    // চেক করা ইউজার নিজেই অথর কিনা
+    if (recipe.authorEmail !== req.user.email && req.user.role !== "admin") {
+      return res.status(403).json({ message: "Unauthorized to edit this recipe" });
+    }
+
+    const updatedRecipe = {
+      recipeName: recipeName || recipe.recipeName,
+      recipeImage: recipeImage !== undefined ? recipeImage : recipe.recipeImage,
+      category: category || recipe.category,
+      cuisineType: cuisineType || recipe.cuisineType,
+      difficultyLevel: difficultyLevel || recipe.difficultyLevel,
+      preparationTime: parseInt(preparationTime) || recipe.preparationTime,
+      ingredients: Array.isArray(ingredients)
+        ? ingredients
+        : ingredients.split(",").map((i) => i.trim()),
+      instructions: instructions || recipe.instructions,
+      updatedAt: new Date(),
+    };
+
+    await recipesCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedRecipe }
+    );
+
+    res.json({ success: true, message: "Recipe updated successfully", recipe: updatedRecipe });
+  } catch (error) {
+    console.error("Error updating recipe:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
