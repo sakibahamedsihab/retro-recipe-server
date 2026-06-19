@@ -4,8 +4,14 @@ const cookieParser = require("cookie-parser");
 require("dotenv").config();
 
 const { connectDB } = require("./db");
+const authRoutes = require("./routes/auth");
+const recipeRoutes = require("./routes/recipes");
+const favoriteRoutes = require("./routes/favorites");
+const reportRoutes = require("./routes/reports");
+const paymentRoutes = require("./routes/payments");
+const adminRoutes = require("./routes/admin");
 
-const app = report || express();
+const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
@@ -20,10 +26,18 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-// Database connection & initialization
+// Database connection
 connectDB()
   .then(() => {
-    // Root endpoint for health check
+    // Mount routes
+    app.use("/api", authRoutes);
+    app.use("/api", recipeRoutes);
+    app.use("/api", favoriteRoutes);
+    app.use("/api", reportRoutes);
+    app.use("/api", paymentRoutes);
+    app.use("/api", adminRoutes);
+
+    // Root endpoint
     app.get("/", (req, res) => {
       res.send({
         status: "healthy",
@@ -42,6 +56,7 @@ connectDB()
         });
     });
 
+    // Start server
     app.listen(PORT, () => {
       console.log(`Server is listening on port ${PORT}`);
     });

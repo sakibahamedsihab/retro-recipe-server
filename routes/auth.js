@@ -1,20 +1,21 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
-const { verifyToken } = require("../middlewares/auth.js");
+const { getDB } = require("../db");
+const { verifyToken } = require("../middlewares/auth");
 
+// Generate JWT and set cookie
 router.post("/jwt", async (req, res) => {
   try {
     const { email, name, image } = req.body;
     if (!email) {
-      return res.status(400).json({ message: "Email is required" });
+      return res.status(400).send({ message: "Email is required" });
     }
 
-    const db = req.app.get("db");
+    const db = getDB();
     const usersCollection = db.collection("users");
 
     let user = await usersCollection.findOne({ email });
-
     if (!user) {
       const newUser = {
         name: name || email.split("@")[0],
@@ -32,16 +33,12 @@ router.post("/jwt", async (req, res) => {
       if (user.isBlocked) {
         return res
           .status(403)
-          .json({ message: "This user account is blocked" });
+          .send({ message: "This user account is blocked" });
       }
     }
 
     const token = jwt.sign(
-      {
-        id: user._id.toString(),
-        email: user.email,
-        role: user.role,
-      },
+      { id: user._id.toString(), email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "7d" },
     );
@@ -49,107 +46,70 @@ router.post("/jwt", async (req, res) => {
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "none",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.json({ success: true, user });
+    res.send({ user });
   } catch (error) {
-    console.error("Error generationg JWT: ", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error("Error generating JWT:", error);
+    res.status(500).send({ message: "Internal Server Error" });
   }
 });
 
+// Logout
 router.post("/logout", (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
   });
-  res.json({ success: true, message: "Logged out successfully" });
+  res.send({ success: true, message: "Logged out successfully" });
 });
 
+// Get current user details
 router.get("/users/me", verifyToken, async (req, res) => {
   try {
-    const db = req.app.get("db");
+    const db = getDB();
     const user = await db
       .collection("users")
       .findOne({ email: req.user.email });
-
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).send({ message: "User not found" });
     }
     if (user.isBlocked) {
-      return res.status(403).json({ message: "Account is blocked" });
+      return res.status(403).send({ message: "Account is blocked" });
     }
-
-    res.json(user);
+    res.send(user);
   } catch (error) {
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error("Error fetching current user:", error);
+    res.status(500).send({ message: "Internal Server Error" });
   }
 });
 
-// ৪. ইউজারের নিজস্ব ড্যাশবোর্ড স্ট্যাটস (GET /api/users/dashboard-stats)
-router.get("/users/dashboard-stats", verifyToken, async (req, res) => {
+// Update Profile
+router.patch("/users/profile", verifyToken, async (req, res) => {
   try {
-    const db = req.app.get("db");
-    const email = req.user.email;
-
-    const totalRecipes = await db
-      .collection("recipes")
-      .countDocuments({ authorEmail: email, status: { $ne: "deleted" } });
-
-    const totalFavorites = await db
-      .collection("favorites")
-      .countDocuments({ userEmail: email });
-
-    const recipes = await db
-      .collection("recipes")
-      .find({ authorEmail: email, status: { $ne: "deleted" } })
-      .toArray();
-
-    const totalLikesReceived = recipes.reduce(
-      (sum, recipe) => sum + (recipe.likesCount || 0),
-      0
-    );
-
-    res.json({
-      totalRecipes,
-      totalFavorites,
-      totalLikesReceived,
-    });
-  } catch (error) {
-    console.error("Dashboard stats error:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
-
-// ৫. ইউজারের প্রোফাইল আপডেট করা (PUT /api/users/profile)
-router.put("/users/profile", verifyToken, async (req, res) => {
-  try {
-    const { name, image, bio } = req.body;
-    const db = req.app.get("db");
+    const { name, image } = req.body;
+    const db = getDB();
     const usersCollection = db.collection("users");
 
-    const updateFields = { updatedAt: new Date() };
-    if (name) updateFields.name = name;
-    if (image !== undefined) updateFields.image = image;
-    if (bio !== undefined) updateFields.bio = bio;
+    const updates = { updatedAt: new Date() };
+    if (name) updates.name = name;
+    if (image) updates.image = image;
 
-    const result = await usersCollection.updateOne(
+    await usersCollection.updateOne(
       { email: req.user.email },
-      { $set: updateFields }
+      { $set: updates },
     );
+    const updatedUser = await usersCollection.findOne({
+      email: req.user.email,
+    });
 
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const updatedUser = await usersCollection.findOne({ email: req.user.email });
-    res.json({ success: true, user: updatedUser });
+    res.send(updatedUser);
   } catch (error) {
-    console.error("Profile update error:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error("Error updating profile:", error);
+    res.status(500).send({ message: "Internal Server Error" });
   }
 });
 

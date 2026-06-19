@@ -1,51 +1,44 @@
 const express = require("express");
 const router = express.Router();
 const { ObjectId } = require("mongodb");
-const { verifyToken } = require("../middlewares/auth.js");
+const { getDB } = require("../db");
+const { verifyToken } = require("../middlewares/auth");
 
+// Add to favorites
 router.post("/favorites", verifyToken, async (req, res) => {
   try {
     const { recipeId } = req.body;
     if (!recipeId)
-      return res.status(400).json({ message: "Recipe ID is required" });
+      return res.status(400).send({ message: "Recipe ID is required" });
 
-    const db = req.app.get("db");
-    const favoritesCollection = db.collection("favorites");
-
-    const existing = await favoritesCollection.findOne({
+    const db = getDB();
+    const query = {
       userEmail: req.user.email,
       recipeId: new ObjectId(recipeId),
-    });
-
+    };
+    const existing = await db.collection("favorites").findOne(query);
     if (existing)
-      return res.status(400).json({ message: "Recipe already in favorites" });
+      return res.status(400).send({ message: "Recipe already in favorites" });
 
-    const result = await favoritesCollection.insertOne({
+    await db.collection("favorites").insertOne({
       userEmail: req.user.email,
       userId: req.user.id,
       recipeId: new ObjectId(recipeId),
       addedAt: new Date(),
     });
-
-    res.status(201).json({
-      success: true,
-      message: "Added to favorites",
-      favoriteId: result.insertedId.toString(),
-    });
+    res.status(201).send({ success: true, message: "Added to favorites" });
   } catch (error) {
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).send({ message: "Internal Server Error" });
   }
 });
 
+// Get aggregated favorites
 router.get("/favorites", verifyToken, async (req, res) => {
   try {
-    const db = req.app.get("db");
-
-    const favorites = await db
+    const favorites = await getDB()
       .collection("favorites")
       .aggregate([
         { $match: { userEmail: req.user.email } },
-
         {
           $lookup: {
             from: "recipes",
@@ -54,11 +47,8 @@ router.get("/favorites", verifyToken, async (req, res) => {
             as: "recipeDetails",
           },
         },
-
         { $unwind: "$recipeDetails" },
-
         { $match: { "recipeDetails.status": "active" } },
-
         {
           $project: {
             _id: 1,
@@ -77,37 +67,21 @@ router.get("/favorites", verifyToken, async (req, res) => {
         },
       ])
       .toArray();
-
-    res.json(favorites);
+    res.send(favorites);
   } catch (error) {
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).send({ message: "Internal Server Error" });
   }
 });
 
-// ৩. ইউজারের ফেভারিট থেকে রেসিপি রিমুভ করা (DELETE /api/favorites/:id)
-router.delete("/favorites/:id", verifyToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const db = req.app.get("db");
-    const favoritesCollection = db.collection("favorites");
-
-    const favorite = await favoritesCollection.findOne({ _id: new ObjectId(id) });
-    if (!favorite) {
-      return res.status(404).json({ message: "Favorite entry not found" });
-    }
-
-    if (favorite.userEmail !== req.user.email) {
-      return res
-        .status(403)
-        .json({ message: "Unauthorized to remove this favorite" });
-    }
-
-    await favoritesCollection.deleteOne({ _id: new ObjectId(id) });
-    res.json({ success: true, message: "Removed from favorites" });
-  } catch (error) {
-    console.error("Error removing from favorites:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
+// Remove from favorites
+router.delete("/favorites/:recipeId", verifyToken, async (req, res) => {
+  await getDB()
+    .collection("favorites")
+    .deleteOne({
+      userEmail: req.user.email,
+      recipeId: new ObjectId(req.params.recipeId),
+    });
+  res.send({ success: true, message: "Removed from favorites" });
 });
 
 module.exports = router;
