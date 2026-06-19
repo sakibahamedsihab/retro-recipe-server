@@ -18,18 +18,39 @@ async function makeAdmin() {
     const db = client.db(process.env.DB_NAME || "retro-recipe-db");
     const users = db.collection("users");
 
-    const user = await users.findOne({ email });
+    let user = await users.findOne({ email });
+    
     if (!user) {
-      console.error(`❌ No user found with email: ${email}`);
-      process.exit(1);
+      // Fallback: Check the singular "user" collection (better-auth)
+      const authUser = await db.collection("user").findOne({ email });
+      if (!authUser) {
+        console.error(`❌ No user found with email: ${email} in either 'users' or 'user' collections.`);
+        process.exit(1);
+      }
+      
+      // Auto-create/sync user to the "users" collection
+      console.log(`ℹ️ User found in better-auth 'user' collection. Syncing to 'users' collection...`);
+      const newUser = {
+        name: authUser.name || email.split("@")[0],
+        email,
+        image: authUser.image || "",
+        role: "admin",
+        isBlocked: false,
+        isPremium: false,
+        createdAt: authUser.createdAt || new Date(),
+        updatedAt: new Date(),
+      };
+      
+      await db.collection("users").insertOne(newUser);
+      console.log(`✅ Success! "${newUser.name}" (${email}) has been synchronized and is now an ADMIN.`);
+    } else {
+      // Update existing user in the plural users collection
+      await users.updateOne(
+        { email },
+        { $set: { role: "admin", updatedAt: new Date() } }
+      );
+      console.log(`✅ Success! "${user.name}" (${email}) is now an ADMIN.`);
     }
-
-    await users.updateOne(
-      { email },
-      { $set: { role: "admin", updatedAt: new Date() } }
-    );
-
-    console.log(`✅ Success! "${user.name}" (${email}) is now an ADMIN.`);
     console.log(`   Log in at http://localhost:3000/login to access the Admin Panel.`);
   } catch (err) {
     console.error("❌ Error:", err.message);
