@@ -121,6 +121,24 @@ router.get("/recipes", async (req, res) => {
   }
 });
 
+// ৪. ইউজারের নিজস্ব রেসিপি পাওয়ার জন্য রাউট
+router.get("/recipes/my-recipes", verifyToken, async (req, res) => {
+  try {
+    const db = req.app.get("db");
+    const recipesCollection = db.collection("recipes");
+
+    const recipes = await recipesCollection
+      .find({ authorEmail: req.user.email, status: { $ne: "deleted" } })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.json(recipes);
+  } catch (error) {
+    console.error("Error fetching my recipes:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 router.delete("/recipes/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
