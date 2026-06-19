@@ -216,4 +216,66 @@ router.delete("/recipes/:id", verifyToken, async (req, res) => {
   }
 });
 
+// Like / Unlike a recipe (PATCH /api/recipes/:id/like)
+router.patch("/recipes/:id/like", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = req.app.get("db");
+    const recipesCollection = db.collection("recipes");
+
+    const recipe = await recipesCollection.findOne({ _id: new ObjectId(id) });
+    if (!recipe) return res.status(404).json({ message: "Recipe not found" });
+
+    const likedBy = recipe.likedBy || [];
+    const alreadyLiked = likedBy.includes(req.user.email);
+
+    if (alreadyLiked) {
+      // Unlike: remove email and decrement count
+      await recipesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $pull: { likedBy: req.user.email },
+          $inc: { likesCount: -1 },
+        }
+      );
+      return res.json({ success: true, liked: false, likesCount: (recipe.likesCount || 1) - 1 });
+    } else {
+      // Like: add email and increment count
+      await recipesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $addToSet: { likedBy: req.user.email },
+          $inc: { likesCount: 1 },
+        }
+      );
+      return res.json({ success: true, liked: true, likesCount: (recipe.likesCount || 0) + 1 });
+    }
+  } catch (error) {
+    console.error("Error toggling like:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// Get a single recipe by ID (GET /api/recipes/:id)
+router.get("/recipes/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = req.app.get("db");
+    const recipesCollection = db.collection("recipes");
+
+    const recipe = await recipesCollection.findOne({
+      _id: new ObjectId(id),
+      status: { $ne: "deleted" },
+    });
+
+    if (!recipe) return res.status(404).json({ message: "Recipe not found" });
+
+    res.json(recipe);
+  } catch (error) {
+    console.error("Error fetching recipe:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 module.exports = router;
+
