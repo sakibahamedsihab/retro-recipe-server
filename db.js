@@ -16,7 +16,7 @@ async function connectDB() {
   try {
     await client.connect();
     console.log("Connected to MongoDB...");
-    dbInstance = client.db("retro-recipe-hub");
+    dbInstance = client.db(process.env.DB_NAME || "retro-recipe-db");
     return dbInstance;
   } catch (error) {
     console.error("Failed to connect to MongoDB: ", error);
