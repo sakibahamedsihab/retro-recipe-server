@@ -20,14 +20,18 @@ router.post("/favorites", verifyToken, async (req, res) => {
     if (existing)
       return res.status(400).json({ message: "Recipe already in favorites" });
 
-    await favoritesCollection.insertOne({
+    const result = await favoritesCollection.insertOne({
       userEmail: req.user.email,
       userId: req.user.id,
       recipeId: new ObjectId(recipeId),
       addedAt: new Date(),
     });
 
-    res.status(201).json({ success: true, message: "Added to favorites" });
+    res.status(201).json({
+      success: true,
+      message: "Added to favorites",
+      favoriteId: result.insertedId.toString(),
+    });
   } catch (error) {
     res.status(500).json({ message: "Internal Server Error" });
   }

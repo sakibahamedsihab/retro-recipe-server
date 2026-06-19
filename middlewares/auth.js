@@ -2,7 +2,6 @@ const jwt = require("jsonwebtoken");
 
 function verifyToken(req, res, next) {
   const token = req.cookies?.token;
-
   if (!token) {
     return res.status(401).send({ message: "Unauthorized: No token provided" });
   }
@@ -11,7 +10,6 @@ function verifyToken(req, res, next) {
     if (err) {
       return res.status(403).send({ message: "Forbidden: Invalid token" });
     }
-
     req.user = decoded;
     next();
   });
@@ -26,4 +24,7 @@ function verifyAdmin(req, res, next) {
   next();
 }
 
-module.exports = { verifyToken, verifyAdmin };
+module.exports = {
+  verifyToken,
+  verifyAdmin,
+};

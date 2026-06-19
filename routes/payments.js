@@ -123,6 +123,10 @@ router.post("/payments/confirm", verifyToken, async (req, res) => {
       return res.status(400).json({ message: "Session not paid or invalid" });
     }
 
+    if (session.metadata.userEmail !== req.user.email) {
+      return res.status(403).json({ message: "Unauthorized payment session" });
+    }
+
     const db = req.app.get("db");
     const transactionId = session.payment_intent; // ইউনিক ট্রানজেকশন আইডি
 

@@ -82,7 +82,106 @@ router.patch(
 
       res.json({
         success: true,
-        message: `User account successfully ${isBlocked ? "blocked" : "unblocked"}`,
+        message: `User account successfully ${!isBlocked ? "blocked" : "unblocked"}`,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  },
+);
+
+// ৪. সমস্ত রেসিপি অ্যাডমিন ভিউ (GET /api/admin/recipes)
+router.get("/admin/recipes", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const db = req.app.get("db");
+    const { page = 1, limit = 10, search } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query = { status: { $ne: "deleted" } };
+    if (search) query.recipeName = { $regex: search, $options: "i" };
+
+    const recipes = await db
+      .collection("recipes")
+      .find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .toArray();
+
+    const total = await db.collection("recipes").countDocuments(query);
+
+    res.json({
+      recipes,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// ৫. রেসিপি ফিচার টগল (PATCH /api/admin/recipes/:id/feature)
+router.patch(
+  "/admin/recipes/:id/feature",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isFeatured } = req.body;
+      const db = req.app.get("db");
+
+      const result = await db.collection("recipes").updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { isFeatured: !!isFeatured, updatedAt: new Date() } },
+      );
+
+      if (result.matchedCount === 0)
+        return res.status(404).json({ message: "Recipe not found" });
+
+      res.json({
+        success: true,
+        message: isFeatured
+          ? "Recipe featured on home page"
+          : "Recipe removed from featured",
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  },
+);
+
+// ৬. ট্রানজেকশন লিস্ট (GET /api/admin/transactions)
+router.get(
+  "/admin/transactions",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const db = req.app.get("db");
+      const { page = 1, limit = 10 } = req.query;
+      const pageNum = parseInt(page);
+      const limitNum = parseInt(limit);
+      const skip = (pageNum - 1) * limitNum;
+
+      const transactions = await db
+        .collection("payments")
+        .find()
+        .sort({ paidAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .toArray();
+
+      const total = await db.collection("payments").countDocuments();
+
+      res.json({
+        transactions,
+        total,
+        page: pageNum,
+        pages: Math.ceil(total / limitNum),
       });
     } catch (error) {
       res.status(500).json({ message: "Internal Server Error" });

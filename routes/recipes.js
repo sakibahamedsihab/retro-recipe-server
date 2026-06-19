@@ -121,6 +121,87 @@ router.get("/recipes", async (req, res) => {
   }
 });
 
+// Featured recipes for home page (GET /api/recipes/featured)
+router.get("/recipes/featured", async (req, res) => {
+  try {
+    const db = req.app.get("db");
+    const recipesCollection = db.collection("recipes");
+    const limit = parseInt(req.query.limit) || 3;
+
+    const recipes = await recipesCollection
+      .find({ status: "active", isFeatured: true })
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .toArray();
+
+    res.json({ recipes });
+  } catch (error) {
+    console.error("Error fetching featured recipes:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// Popular recipes sorted by likes (GET /api/recipes/popular)
+router.get("/recipes/popular", async (req, res) => {
+  try {
+    const db = req.app.get("db");
+    const recipesCollection = db.collection("recipes");
+    const limit = parseInt(req.query.limit) || 3;
+
+    const recipes = await recipesCollection
+      .find({ status: "active" })
+      .sort({ likesCount: -1, createdAt: -1 })
+      .limit(limit)
+      .toArray();
+
+    res.json({ recipes });
+  } catch (error) {
+    console.error("Error fetching popular recipes:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// User interaction status for a recipe (GET /api/recipes/:id/status)
+router.get("/recipes/:id/status", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = req.app.get("db");
+    const recipesCollection = db.collection("recipes");
+    const favoritesCollection = db.collection("favorites");
+    const paymentsCollection = db.collection("payments");
+
+    const recipe = await recipesCollection.findOne({
+      _id: new ObjectId(id),
+      status: { $ne: "deleted" },
+    });
+    if (!recipe) return res.status(404).json({ message: "Recipe not found" });
+
+    const liked = (recipe.likedBy || []).includes(req.user.email);
+
+    const favorite = await favoritesCollection.findOne({
+      userEmail: req.user.email,
+      recipeId: new ObjectId(id),
+    });
+
+    const purchased = await paymentsCollection.findOne({
+      userEmail: req.user.email,
+      recipeId: new ObjectId(id),
+      paymentStatus: "succeeded",
+    });
+
+    res.json({
+      liked,
+      likesCount: recipe.likesCount || 0,
+      favorited: !!favorite,
+      favoriteId: favorite?._id?.toString() || null,
+      purchased: !!purchased,
+    });
+  } catch (error) {
+    console.error("Error fetching recipe status:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 router.get("/recipes/my-recipes", verifyToken, async (req, res) => {
   try {
     const db = req.app.get("db");

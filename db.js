@@ -1,26 +1,37 @@
 const { MongoClient } = require("mongodb");
+require("dotenv").config();
 
 const uri = process.env.MONGODB_URI;
-
 if (!uri) {
-  console.error("Error: MONGODB_URI is not defined in the environment");
+  console.error("Error: MONGODB_URI is not defined in the environment.");
   process.exit(1);
 }
 
 const client = new MongoClient(uri);
-let dbInstance = null;
+let db = null;
 
 async function connectDB() {
-  if (dbInstance) return dbInstance;
-
+  if (db) return db;
   try {
     await client.connect();
-    console.log("Connected to MongoDB...");
-    dbInstance = client.db(process.env.DB_NAME || "retro-recipe-db");
-    return dbInstance;
+    console.log("Connected to MongoDB successfully!");
+    db = client.db(process.env.DB_NAME);
+    return db;
   } catch (error) {
-    console.error("Failed to connect to MongoDB: ", error);
+    console.error("Failed to connect to MongoDB:", error);
+    throw error;
   }
 }
 
-module.exports = { connectDB };
+function getDB() {
+  if (!db) {
+    throw new Error("Database not initialized. Call connectDB first.");
+  }
+  return db;
+}
+
+module.exports = {
+  connectDB,
+  getDB,
+  client,
+};
