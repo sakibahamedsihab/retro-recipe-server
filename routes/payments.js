@@ -11,7 +11,7 @@ router.post(
   verifyToken,
   async (req, res) => {
     try {
-      const { type, recipeId } = req.body;
+      const { type, recipeId, plan } = req.body;
       if (!type)
         return res.status(400).send({ message: "Payment type is required" });
 
@@ -29,18 +29,43 @@ router.post(
       };
 
       if (type === "premium") {
-        if (user.isPremium)
-          return res.status(400).send({ message: "User is already premium" });
+        if (!plan || !["bronze", "silver", "gold"].includes(plan)) {
+          return res.status(400).send({ message: "Valid plan (bronze, silver, gold) is required" });
+        }
+
+        let targetLimit = 5;
+        let amount = 499;
+        let planName = "Bronze";
+        let planDesc = "Unlock up to 5 recipe uploads and get a bronze badge!";
+
+        if (plan === "silver") {
+          targetLimit = 15;
+          amount = 1499;
+          planName = "Silver";
+          planDesc = "Unlock up to 15 recipe uploads and get a silver badge!";
+        } else if (plan === "gold") {
+          targetLimit = 9999;
+          amount = 2999;
+          planName = "Gold";
+          planDesc = "Unlock unlimited recipe uploads and get a gold badge!";
+        }
+
+        // If user is already premium, verify they aren't trying to downgrade or buy a plan they already have/exceed
+        const currentLimit = user.recipeLimit || (user.isPremium ? (user.premiumType === "bronze" ? 5 : user.premiumType === "silver" ? 15 : 9999) : 2);
+        if (user.isPremium && currentLimit >= targetLimit) {
+          return res.status(400).send({ message: `You already have ${planName} or a higher plan` });
+        }
+
+        metadata.plan = plan;
         lineItems = [
           {
             price_data: {
               currency: "usd",
               product_data: {
-                name: "RecipeHub Premium Membership",
-                description:
-                  "Unlock unlimited recipe uploads and get a premium badge!",
+                name: `RecipeHub ${planName} Membership`,
+                description: planDesc,
               },
-              unit_amount: 1499,
+              unit_amount: amount,
             },
             quantity: 1,
           },
@@ -81,8 +106,8 @@ router.post(
         line_items: lineItems,
         mode: "payment",
         metadata,
-        success_url: `${process.env.CLIENT_URL}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}&type=${type}${recipeId ? "&recipeId=" + recipeId : ""}`,
-        cancel_url: `${process.env.CLIENT_URL}/dashboard`,
+        success_url: `${process.env.CLIENT_URL}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}&type=${type}${recipeId ? "&recipeId=" + recipeId : ""}${plan ? "&plan=" + plan : ""}`,
+        cancel_url: `${process.env.CLIENT_URL}/dashboard/upgrade`,
       });
 
       res.send({ id: session.id, url: session.url });
@@ -126,11 +151,13 @@ router.post("/payments/confirm", verifyToken, async (req, res) => {
     await db.collection("payments").insertOne(paymentDoc);
 
     if (session.metadata.type === "premium") {
+      const plan = session.metadata.plan || "silver";
+      const limit = plan === "bronze" ? 5 : plan === "silver" ? 15 : 9999;
       await db
         .collection("users")
         .updateOne(
           { email: session.metadata.userEmail },
-          { $set: { isPremium: true, updatedAt: new Date() } },
+          { $set: { isPremium: true, premiumType: plan, recipeLimit: limit, updatedAt: new Date() } },
         );
     }
 

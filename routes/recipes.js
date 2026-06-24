@@ -29,15 +29,15 @@ router.post("/recipes", verifyToken, async (req, res) => {
       .collection("users")
       .findOne({ email: req.user.email });
 
-    if (user.role !== "admin" && !user.isPremium) {
+    if (user.role !== "admin") {
       const activeRecipeCount = await db.collection("recipes").countDocuments({
         authorEmail: user.email,
         status: { $ne: "deleted" },
       });
-      if (activeRecipeCount >= 2) {
+      const limit = user.recipeLimit || (user.isPremium ? (user.premiumType === "bronze" ? 5 : user.premiumType === "silver" ? 15 : 9999) : 2);
+      if (activeRecipeCount >= limit) {
         return res.status(403).send({
-          message:
-            "Limit reached: Free members can only add up to 2 recipes. Upgrade to Premium for unlimited uploads!",
+          message: `Limit reached: Your current plan allows up to ${limit} recipes. Upgrade to Premium for a higher limit!`,
         });
       }
     }
