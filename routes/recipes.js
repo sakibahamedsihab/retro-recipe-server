@@ -198,16 +198,50 @@ router.delete("/recipes/:id", verifyToken, async (req, res) => {
 });
 
 router.post("/recipes/:id/like", verifyToken, async (req, res) => {
-  await getDB()
-    .collection("recipes")
-    .updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $inc: { likesCount: 1 }, $set: { updatedAt: new Date() } },
-    );
-  const updated = await getDB()
-    .collection("recipes")
-    .findOne({ _id: new ObjectId(req.params.id) });
-  res.send({ success: true, likesCount: updated.likesCount });
+  try {
+    const db = getDB();
+    const recipeId = new ObjectId(req.params.id);
+    const userEmail = req.user.email;
+
+    const recipe = await db.collection("recipes").findOne({ _id: recipeId });
+    if (!recipe) return res.status(404).send({ message: "Recipe not found" });
+
+    const likedBy = recipe.likedBy || [];
+    const hasLiked = likedBy.includes(userEmail);
+
+    if (hasLiked) {
+      // Unlike recipe
+      await db.collection("recipes").updateOne(
+        { _id: recipeId },
+        {
+          $pull: { likedBy: userEmail },
+          $inc: { likesCount: -1 },
+          $set: { updatedAt: new Date() },
+        },
+      );
+    } else {
+      // Like recipe
+      await db.collection("recipes").updateOne(
+        { _id: recipeId },
+        {
+          $addToSet: { likedBy: userEmail },
+          $inc: { likesCount: 1 },
+          $set: { updatedAt: new Date() },
+        },
+      );
+    }
+
+    const updated = await db.collection("recipes").findOne({ _id: recipeId });
+    res.send({
+      success: true,
+      likesCount: updated.likesCount,
+      liked: !hasLiked,
+      likedBy: updated.likedBy || [],
+    });
+  } catch (error) {
+    console.error("Error toggling like state:", error);
+    res.status(500).send({ message: "Internal Server Error" });
+  }
 });
 
 // Toggle recipe feature state (Admin only)
