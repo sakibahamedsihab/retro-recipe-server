@@ -210,4 +210,27 @@ router.post("/recipes/:id/like", verifyToken, async (req, res) => {
   res.send({ success: true, likesCount: updated.likesCount });
 });
 
+// Toggle recipe feature state (Admin only)
+router.patch(
+  "/recipes/:id/feature",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const db = getDB();
+      const { isFeatured } = req.body;
+      await db
+        .collection("recipes")
+        .updateOne(
+          { _id: new ObjectId(req.params.id) },
+          { $set: { isFeatured: !!isFeatured, updatedAt: new Date() } },
+        );
+      res.send({ success: true, message: "Recipe feature state updated" });
+    } catch (error) {
+      console.error("Error updating recipe feature state:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  },
+);
+
 module.exports = router;
